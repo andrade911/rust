@@ -271,6 +271,7 @@ pub struct ModuleConfig {
     no_integrated_as: bool,
     embed_bitcode: bool,
     embed_bitcode_marker: bool,
+    pub polly: bool,
 }
 
 impl ModuleConfig {
@@ -302,7 +303,8 @@ impl ModuleConfig {
             vectorize_loop: false,
             vectorize_slp: false,
             merge_functions: false,
-            inline_threshold: None
+            inline_threshold: None,
+            polly: false,
         }
     }
 
@@ -340,6 +342,8 @@ impl ModuleConfig {
 
         self.merge_functions = sess.opts.optimize == config::OptLevel::Default ||
                                sess.opts.optimize == config::OptLevel::Aggressive;
+        self.polly = sess.opts.cg.polly && !self.no_prepopulate_passes &&
+                     !sess.target.target.options.is_like_emscripten;
     }
 }
 
@@ -567,8 +571,8 @@ unsafe fn optimize(cgcx: &CodegenContext,
 
         if !config.no_verify { assert!(addpass("verify")); }
         if !config.no_prepopulate_passes {
-            llvm::LLVMRustAddAnalysisPasses(tm, fpm, llmod);
-            llvm::LLVMRustAddAnalysisPasses(tm, mpm, llmod);
+            llvm::LLVMRustAddAnalysisPasses(tm, fpm, llmod, config.polly);
+            llvm::LLVMRustAddAnalysisPasses(tm, mpm, llmod, config.polly);
             let opt_level = config.opt_level.unwrap_or(llvm::CodeGenOptLevel::None);
             with_llvm_pmb(llmod, &config, opt_level, &mut |b| {
                 llvm::LLVMPassManagerBuilderPopulateFunctionPassManager(b, fpm);
@@ -666,11 +670,12 @@ unsafe fn codegen(cgcx: &CodegenContext,
     unsafe fn with_codegen<F, R>(tm: TargetMachineRef,
                                  llmod: ModuleRef,
                                  no_builtins: bool,
+                                 polly: bool,
                                  f: F) -> R
         where F: FnOnce(PassManagerRef) -> R,
     {
         let cpm = llvm::LLVMCreatePassManager();
-        llvm::LLVMRustAddAnalysisPasses(tm, cpm, llmod);
+        llvm::LLVMRustAddAnalysisPasses(tm, cpm, llmod, polly);
         llvm::LLVMRustAddLibraryInfo(cpm, llmod, no_builtins);
         f(cpm)
     }
@@ -765,7 +770,8 @@ unsafe fn codegen(cgcx: &CodegenContext,
                 cursor.position() as size_t
             }
 
-            with_codegen(tm, llmod, config.no_builtins, |cpm| {
+            with_codegen(tm, llmod, config.no_builtins, config.polly,
+                         |cpm| {
                 llvm::LLVMRustPrintModule(cpm, llmod, out.as_ptr(), demangle_callback);
                 llvm::LLVMDisposePassManager(cpm);
             });
@@ -783,7 +789,8 @@ unsafe fn codegen(cgcx: &CodegenContext,
             } else {
                 llmod
             };
-            with_codegen(tm, llmod, config.no_builtins, |cpm| {
+            with_codegen(tm, llmod, config.no_builtins, config.polly,
+                         |cpm| {
                 write_output_file(diag_handler, tm, cpm, llmod, &path,
                                   llvm::FileType::AssemblyFile)
             })?;
@@ -794,7 +801,8 @@ unsafe fn codegen(cgcx: &CodegenContext,
         }
 
         if write_obj {
-            with_codegen(tm, llmod, config.no_builtins, |cpm| {
+            with_codegen(tm, llmod, config.no_builtins, config.polly,
+                         |cpm| {
                 write_output_file(diag_handler, tm, cpm, llmod, &obj_out,
                                   llvm::FileType::ObjectFile)
             })?;

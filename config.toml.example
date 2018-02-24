@@ -346,6 +346,9 @@
 # Whether to deny warnings in crates
 #deny-warnings = true
 
+# Use polyhedral optimizations by default.
+#use-polly-by-default = false
+
 # =============================================================================
 # Options for specific targets
 #

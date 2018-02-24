@@ -208,6 +208,9 @@ fn main() {
         println!("cargo:rustc-link-lib={}={}", kind, name);
     }
 
+    println!("cargo:rustc-link-lib=static=Polly");
+    println!("cargo:rustc-link-lib=static=PollyISL");
+
     // LLVM ldflags
     //
     // If we're a cross-compile of LLVM then unfortunately we can't trust these
