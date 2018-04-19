@@ -1074,6 +1074,9 @@ options! {CodegenOptions, CodegenSetter, basic_codegen_options,
         [TRACKED], "panic strategy to compile crate with"),
     incremental: Option<String> = (None, parse_opt_string, [UNTRACKED],
           "enable incremental compilation"),
+    polly: bool = (option_env!("RUSTC_FORCE_USE_POLLY").map(|_| true ).unwrap_or(false),
+                   parse_bool, [UNTRACKED], "Run the Polly polyhedral \
+           model optimization passes."),
 }
 
 options! {DebuggingOptions, DebuggingSetter, basic_debugging_options,
