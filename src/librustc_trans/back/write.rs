@@ -314,7 +314,8 @@ impl ModuleConfig {
         self.inline_threshold = sess.opts.cg.inline_threshold;
         self.obj_is_bitcode = sess.target.target.options.obj_is_bitcode;
         let embed_bitcode = sess.target.target.options.embed_bitcode ||
-            sess.opts.debugging_opts.embed_bitcode;
+                            sess.opts.debugging_opts.embed_bitcode ||
+                            sess.opts.debugging_opts.cross_lang_lto;
         if embed_bitcode {
             match sess.opts.optimize {
                 config::OptLevel::No |
@@ -862,13 +863,18 @@ unsafe fn embed_bitcode(cgcx: &CodegenContext,
         "rustc.embedded.module\0".as_ptr() as *const _,
     );
     llvm::LLVMSetInitializer(llglobal, llconst);
-    let section = if cgcx.opts.target_triple.triple().contains("-ios") {
+
+    let is_apple = cgcx.opts.target_triple.triple().contains("-ios") ||
+                   cgcx.opts.target_triple.triple().contains("-darwin");
+
+    let section = if is_apple {
         "__LLVM,__bitcode\0"
     } else {
         ".llvmbc\0"
     };
     llvm::LLVMSetSection(llglobal, section.as_ptr() as *const _);
     llvm::LLVMRustSetLinkage(llglobal, llvm::Linkage::PrivateLinkage);
+    llvm::LLVMSetGlobalConstant(llglobal, llvm::True);
 
     let llconst = C_bytes_in_context(llcx, &[]);
     let llglobal = llvm::LLVMAddGlobal(
@@ -877,7 +883,7 @@ unsafe fn embed_bitcode(cgcx: &CodegenContext,
         "rustc.embedded.cmdline\0".as_ptr() as *const _,
     );
     llvm::LLVMSetInitializer(llglobal, llconst);
-    let section = if cgcx.opts.target_triple.triple().contains("-ios") {
+    let section = if  is_apple {
         "__LLVM,__cmdline\0"
     } else {
         ".llvmcmd\0"
